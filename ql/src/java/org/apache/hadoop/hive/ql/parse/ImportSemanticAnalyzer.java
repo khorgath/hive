@@ -48,6 +48,7 @@ import org.apache.hadoop.hive.metastore.api.Order;
 import org.apache.hadoop.hive.metastore.api.Partition;
 import org.apache.hadoop.hive.ql.ErrorMsg;
 import org.apache.hadoop.hive.ql.QueryState;
+import org.apache.hadoop.hive.ql.exec.ReplCopyTask;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.exec.TaskFactory;
 import org.apache.hadoop.hive.ql.exec.Utilities;
@@ -57,7 +58,6 @@ import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.metadata.InvalidTableException;
 import org.apache.hadoop.hive.ql.metadata.Table;
 import org.apache.hadoop.hive.ql.plan.AddPartitionDesc;
-import org.apache.hadoop.hive.ql.plan.CopyWork;
 import org.apache.hadoop.hive.ql.plan.CreateTableDesc;
 import org.apache.hadoop.hive.ql.plan.DDLWork;
 import org.apache.hadoop.hive.ql.plan.DropTableDesc;
@@ -318,11 +318,11 @@ public class ImportSemanticAnalyzer extends BaseSemanticAnalyzer {
     return tblDesc;
   }
 
-  private Task<?> loadTable(URI fromURI, Table table, boolean replace, Path tgtPath) {
+  private Task<?> loadTable(URI fromURI, Table table, boolean replace, Path tgtPath,
+                            ReplicationSpec replicationSpec) {
     Path dataPath = new Path(fromURI.toString(), "data");
     Path tmpPath = ctx.getExternalTmpPath(tgtPath);
-    Task<?> copyTask = TaskFactory.get(new CopyWork(dataPath,
-       tmpPath, false), conf);
+    Task<?> copyTask = ReplCopyTask.getLoadCopyTask(replicationSpec, dataPath, tmpPath, conf);
     LoadTableDesc loadTableWork = new LoadTableDesc(tmpPath,
         Utilities.getTableDesc(table), new TreeMap<String, String>(),
         replace);
@@ -332,6 +332,8 @@ public class ImportSemanticAnalyzer extends BaseSemanticAnalyzer {
     rootTasks.add(copyTask);
     return loadTableTask;
   }
+
+
 
   private Task<?> createTableTask(CreateTableDesc tableDesc){
     return TaskFactory.get(new DDLWork(
@@ -392,8 +394,8 @@ public class ImportSemanticAnalyzer extends BaseSemanticAnalyzer {
           + " with source location: " + srcLocation);
       Path tgtLocation = new Path(partSpec.getLocation());
       Path tmpPath = ctx.getExternalTmpPath(tgtLocation);
-      Task<?> copyTask = TaskFactory.get(new CopyWork(new Path(srcLocation),
-          tmpPath, false), conf);
+      Task<?> copyTask = ReplCopyTask.getLoadCopyTask(
+          replicationSpec, new Path(srcLocation), tmpPath, conf);
       Task<?> addPartTask = TaskFactory.get(new DDLWork(getInputs(),
           getOutputs(), addPartitionDesc), conf);
       LoadTableDesc loadTableWork = new LoadTableDesc(tmpPath,
@@ -712,7 +714,7 @@ public class ImportSemanticAnalyzer extends BaseSemanticAnalyzer {
         Path tgtPath = new Path(table.getDataLocation().toString());
         FileSystem tgtFs = FileSystem.get(tgtPath.toUri(), conf);
         checkTargetLocationEmpty(tgtFs, tgtPath, replicationSpec);
-        loadTable(fromURI, table, false, tgtPath);
+        loadTable(fromURI, table, false, tgtPath, replicationSpec);
       }
       // Set this to read because we can't overwrite any existing partitions
       outputs.add(new WriteEntity(table, WriteEntity.WriteType.DDL_NO_LOCK));
@@ -747,7 +749,7 @@ public class ImportSemanticAnalyzer extends BaseSemanticAnalyzer {
           }
           FileSystem tgtFs = FileSystem.get(tablePath.toUri(), conf);
           checkTargetLocationEmpty(tgtFs, tablePath, replicationSpec);
-          t.addDependentTask(loadTable(fromURI, table, false, tablePath));
+          t.addDependentTask(loadTable(fromURI, table, false, tablePath, replicationSpec));
         }
       }
       rootTasks.add(t);
@@ -818,7 +820,7 @@ public class ImportSemanticAnalyzer extends BaseSemanticAnalyzer {
           }
         } else {
           LOG.debug("adding dependent CopyWork/MoveWork for table");
-          t.addDependentTask(loadTable(fromURI, table, true, new Path(tblDesc.getLocation())));
+          t.addDependentTask(loadTable(fromURI, table, true, new Path(tblDesc.getLocation()),replicationSpec));
         }
       }
       if (dr == null){
@@ -873,7 +875,7 @@ public class ImportSemanticAnalyzer extends BaseSemanticAnalyzer {
           return; // silently return, table is newer than our replacement.
         }
         if (!replicationSpec.isMetadataOnly()) {
-          loadTable(fromURI, table, true, new Path(fromURI)); // repl-imports are replace-into
+          loadTable(fromURI, table, true, new Path(fromURI), replicationSpec); // repl-imports are replace-into
         } else {
           rootTasks.add(alterTableTask(tblDesc));
         }

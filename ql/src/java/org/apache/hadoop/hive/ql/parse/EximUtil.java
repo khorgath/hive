@@ -20,6 +20,7 @@ package org.apache.hadoop.hive.ql.parse;
 
 import com.google.common.base.Function;
 import org.apache.commons.lang.StringUtils;
+import org.apache.hadoop.hive.metastore.api.Database;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.fs.FSDataInputStream;
@@ -165,6 +166,36 @@ public class EximUtil {
   public static final String METADATA_FORMAT_VERSION = "0.1";
   /* If null, then the major version number should match */
   public static final String METADATA_FORMAT_FORWARD_COMPATIBLE_VERSION = null;
+
+  public static void createDbExportDump(
+      FileSystem fs, Path metadataPath, Database dbObj,
+      ReplicationSpec replicationSpec) throws IOException, SemanticException {
+
+    // WARNING NOTE : at this point, createDbExportDump lives only in a world where ReplicationSpec is in replication scope
+    // If we later make this work for non-repl cases, analysis of this logic might become necessary. Also, this is using
+    // Replv2 semantics, i.e. with listFiles laziness (no copy at export time)
+
+    OutputStream out = fs.create(metadataPath);
+    JsonGenerator jgen = (new JsonFactory()).createJsonGenerator(out);
+    jgen.writeStartObject();
+    jgen.writeStringField("version",METADATA_FORMAT_VERSION);
+    dbObj.putToParameters(ReplicationSpec.KEY.CURR_STATE_ID.toString(), replicationSpec.getCurrentReplicationState());
+
+    if (METADATA_FORMAT_FORWARD_COMPATIBLE_VERSION != null) {
+      jgen.writeStringField("fcversion",METADATA_FORMAT_FORWARD_COMPATIBLE_VERSION);
+    }
+    TSerializer serializer = new TSerializer(new TJSONProtocol.Factory());
+    try {
+      jgen.writeStringField("db", serializer.toString(dbObj, "UTF-8"));
+    } catch (TException e) {
+      throw new SemanticException(
+          ErrorMsg.ERROR_SERIALIZE_METASTORE
+              .getMsg(), e);
+    }
+
+    jgen.writeEndObject();
+    jgen.close(); // JsonGenerator owns the OutputStream, so it closes it when we call close.
+  }
 
   public static void createExportDump(FileSystem fs, Path metadataPath,
       org.apache.hadoop.hive.ql.metadata.Table tableHandle,

@@ -380,6 +380,10 @@ TOK_ROLLBACK;
 TOK_SET_AUTOCOMMIT;
 TOK_CACHE_METADATA;
 TOK_ABORT_TRANSACTIONS;
+TOK_REPL_DUMP;
+TOK_REPL_LOAD;
+TOK_BATCH;
+TOK_TO;
 }
 
 
@@ -733,6 +737,8 @@ execStatement
     | loadStatement
     | exportStatement
     | importStatement
+    | replDumpStatement
+    | replLoadStatement
     | ddlStatement
     | deleteStatement
     | updateStatement
@@ -772,6 +778,35 @@ importStatement
          tableLocation?
     -> ^(TOK_IMPORT $path $tab? $ext? tableLocation?)
     ;
+
+//replDumpStatement
+//@init { pushMsg("replication dump statement", state); }
+//@after { popMsg(state); }
+//      : KW_REPL KW_DUMP
+//        (dbName=identifier) (DOT tblName=identifier)?
+//    -> ^(TOK_REPL_DUMP $dbName $tblName?)
+//    ;
+
+replDumpStatement
+@init { pushMsg("replication dump statement", state); }
+@after { popMsg(state); }
+      : KW_REPL KW_DUMP
+        (dbName=identifier) (DOT tblName=identifier)?
+        (KW_FROM (eventId=Number)
+          (KW_TO (rangeEnd=Number))?
+          (KW_BATCH (batchSize=Number))?
+        )?
+    -> ^(TOK_REPL_DUMP $dbName $tblName? ^(TOK_FROM $eventId (TOK_TO $rangeEnd)? (TOK_BATCH $batchSize)?)? )
+    ;
+
+replLoadStatement
+@init { pushMsg("replication load statement", state); }
+@after { popMsg(state); }
+      : KW_REPL KW_LOAD
+        ((dbName=identifier) (DOT tblName=identifier)?)?
+        KW_FROM (path=StringLiteral)
+      -> ^(TOK_REPL_LOAD $path $dbName? $tblName?)
+      ;
 
 ddlStatement
 @init { pushMsg("ddl statement", state); }

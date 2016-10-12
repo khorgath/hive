@@ -42,6 +42,7 @@ public class ReplicationSpec {
   private String eventId = null;
   private String currStateId = null;
   private boolean isNoop = false;
+  private boolean isLazy = false; // lazy mode => we only list files, and expect that the eventual copy will pull data in.
 
 
   // Key definitions related to replication
@@ -279,6 +280,21 @@ public class ReplicationSpec {
   public void setNoop(boolean isNoop) {
     this.isNoop = isNoop;
   }
+
+  /**
+   * @return whether or not the current replication action is set to be lazy
+   */
+  public boolean isLazy() {
+    return isLazy;
+  }
+
+  /**
+   * @param isLazy whether or not the current replication action should be lazy
+   */
+  public void setLazy(boolean isLazy){
+    this.isLazy = isLazy;
+  }
+
 
   public String get(KEY key) {
     switch (key){
