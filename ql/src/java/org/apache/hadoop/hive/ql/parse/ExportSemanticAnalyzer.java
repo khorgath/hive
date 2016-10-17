@@ -208,27 +208,9 @@ public class ExportSemanticAnalyzer extends BaseSemanticAnalyzer {
         rootTasks.add(rTask);
         inputs.add(new ReadEntity(ts.tableHandle));
       }
-      outputs.add(_toWriteEntity(parentPath,conf));
+      outputs.add(EximUtil._toWriteEntity(parentPath,conf));
     }
   }
 
-  // FIXME : static copy of BaseSemanticAnalyzer.toWriteEntity copied here so we can reuse above export logic statically - fix
-  private static WriteEntity _toWriteEntity(Path location, HiveConf conf) throws SemanticException {
-    try {
-      Path path = _tryQualifyPath(location,conf);
-      return new WriteEntity(path, FileUtils.isLocalFile(conf, path.toUri()));
-    } catch (Exception e) {
-      throw new SemanticException(e);
-    }
-  }
-
-  // FIXME : static copy of BaseSemanticAnalyzer.toWriteEntity copied here so we can reuse above export logic statically - fix
-  private static Path _tryQualifyPath(Path path, HiveConf conf) throws IOException {
-    try {
-      return path.getFileSystem(conf).makeQualified(path);
-    } catch (IOException e) {
-      return path;  // some tests expected to pass invalid schema
-    }
-  }
 
 }
