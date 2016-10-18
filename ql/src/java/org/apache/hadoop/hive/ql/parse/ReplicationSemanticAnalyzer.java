@@ -172,7 +172,8 @@ public class ReplicationSemanticAnalyzer extends BaseSemanticAnalyzer {
     try {
       URI toURI = EximUtil.getValidatedURI(conf, tableRoot.toUri().toString());
       TableSpec ts = new TableSpec(db, conf, dbName + "." + tblName, null);
-      ExportSemanticAnalyzer.prepareExport(ast, toURI, ts, getNewReplicationSpec(), db, conf, ctx, rootTasks, inputs, outputs, LOG);
+      ExportSemanticAnalyzer.prepareExport(
+          ast, toURI, ts, getNewReplicationSpec(), db, conf, ctx, rootTasks, inputs, outputs, LOG);
     } catch (HiveException e) {
       throw new SemanticException(e); // TODO : simple wrap & rethrow for now, clean up with error codes
     }
@@ -197,7 +198,8 @@ public class ReplicationSemanticAnalyzer extends BaseSemanticAnalyzer {
   private ReplicationSpec getNewReplicationSpec() throws SemanticException {
     try {
       ReplicationSpec replicationSpec = new ReplicationSpec(true, false, "replv2", "will-be-set", false);
-      replicationSpec.setCurrentReplicationState(String.valueOf(db.getMSC().getCurrentNotificationEventId().getEventId()));
+      replicationSpec.setCurrentReplicationState(
+          String.valueOf(db.getMSC().getCurrentNotificationEventId().getEventId()));
       replicationSpec.setLazy(true); // no copy on export
       return replicationSpec;
     } catch (Exception e){
@@ -234,7 +236,8 @@ public class ReplicationSemanticAnalyzer extends BaseSemanticAnalyzer {
     // We look at the path, and go through each subdir.
     // Each subdir corresponds to a database.
     // For each subdir, there is a _metadata file which allows us to re-impress the db object
-    // After each db object is loaded appropriately, iterate through the sub-table dirs, and pretend that we had an IMPORT on each of them, into this db.
+    // After each db object is loaded appropriately, iterate through the sub-table dirs, and pretend
+    // that we had an IMPORT on each of them, into this db.
 
     try {
 
@@ -247,11 +250,14 @@ public class ReplicationSemanticAnalyzer extends BaseSemanticAnalyzer {
       }
 
       // Now, the dumped path can be one of two things:
-      //  a) It can be a db dump, in which case we expect a set of dirs, each with a db name, and with a _metadata file in each, and table dirs inside that.
-      //  b) It can be a table dump dir, in which case we expect a _metadata dump of a table in question in the dir, and individual ptn dir hierarchy.
-      // Once we expand this into doing incremental repl, we can have individual events which can be other things like roles and fns as well.
-      // Also, if tblname is specified, we're guaranteed that this is a tbl-level dump, and it is an error condition if we find anything else.
-      // Also, if dbname is specified, we expect exactly one db dumped, and having more is an error condition.
+      //  a) It can be a db dump, in which case we expect a set of dirs, each with a
+      //     db name, and with a _metadata file in each, and table dirs inside that.
+      //  b) It can be a table dump dir, in which case we expect a _metadata dump of
+      //     a table in question in the dir, and individual ptn dir hierarchy.
+      // Once we expand this into doing incremental repl, we can have individual events which can
+      // be other things like roles and fns as well. Also, if tblname is specified, we're guaranteed
+      // that this is a tbl-level dump, and it is an error condition if we find anything else. Also,
+      // if dbname is specified, we expect exactly one db dumped, and having more is an error condition.
 
       if ((tblName != null) && !(tblName.isEmpty())){
         analyzeTableLoad(dbName, tblName, path, null);
@@ -353,30 +359,22 @@ public class ReplicationSemanticAnalyzer extends BaseSemanticAnalyzer {
       boolean isPartSpecSet = false; // repl loads are not partition level
       LinkedHashMap<String, String> parsedPartSpec = null; // repl loads are not partition level
       String parsedLocation = null; // no location for repl imports
+      boolean waitOnCreateDb = false;
 
       List<Task<? extends Serializable>> importTasks = null;
 
       if (precursor == null){
         importTasks = rootTasks;
+        waitOnCreateDb = false;
       } else {
         importTasks = new ArrayList<Task<? extends  Serializable>>();
+        waitOnCreateDb = true;
       }
 
-      EximUtil.BSAContext x = new EximUtil.BSAContext(conf, db, inputs, outputs, importTasks , LOG, ctx);
-      // TODO : we need to ensure that "precursor" is always run before any other table loads, if it is not null
-      // and thus, we need to change signature of prepareImport to allow specifying that. We do this by
-      // initializing a new importTasks to send to the BSAContext instead of rootTasks, and then calling
-      // prepareImport on that, and then making sure all roottasks of x are added to our roottasks
-      // after making appropriate dependencies. However, this makes future refactoring of BSAContext
-      // into BSA difficult, and this means it is probably better to directly pass in rootTasks/importTasks
-      // instead. And once we come to the point of passing in rootTasks, we might wind up in a slippery
-      // slope of then passing in inputs, then outputs, and so on? (Note - unlikely, since those do not
-      // have a tree-like relationship aspect, but still worth considering during the BSAContext refactor)
-
-      x.replLoadMode = true; // TODO : Again, leaky semantics not allowing a clean refactor of BSAContext
-
+      EximUtil.SemanticAnalyzerWrapperContext x = new EximUtil.SemanticAnalyzerWrapperContext(
+          conf, db, inputs, outputs, importTasks , LOG, ctx);
       ImportSemanticAnalyzer.prepareImport(
-          isLocationSet, isExternalSet, isPartSpecSet,
+          isLocationSet, isExternalSet, isPartSpecSet, waitOnCreateDb,
           parsedLocation, tblName, dbName, parsedPartSpec,
           locn, x );
 
@@ -394,12 +392,13 @@ public class ReplicationSemanticAnalyzer extends BaseSemanticAnalyzer {
 
   }
 
-  private static Task<?> createDatabaseTask(CreateDatabaseDesc createDatabaseDesc, EximUtil.BSAContext x){
+  private static Task<?> createDatabaseTask(CreateDatabaseDesc createDatabaseDesc,
+                                            EximUtil.SemanticAnalyzerWrapperContext x){
     return TaskFactory.get(new DDLWork(
-        x.inputs,
-        x.outputs,
+        x.getInputs(),
+        x.getOutputs(),
         createDatabaseDesc
-    ), x.conf);
+    ), x.getConf());
   }
 
   private void logg(String msg) {

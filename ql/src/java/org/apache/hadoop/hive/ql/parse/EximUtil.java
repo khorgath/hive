@@ -80,32 +80,60 @@ public class EximUtil {
   /**
    * Wrapper class for common BaseSemanticAnalyzer non-static members
    * into static generic methods without having the fn signatures
-   * becoming overwhelming.
+   * becoming overwhelming, with passing each of these into every function.
    *
-   * FIXME : Remove this class
-   * Why? Because presence of this is only temporary, we will wind up using
-   * BSA itself, with proper accessors, and pass in "this" instead.
+   * Note, however, that since this is constructed with args passed in,
+   * parts of the context, such as the tasks or inputs, might have been
+   * overridden with temporary context values, rather than being exactly
+   * 1:1 equivalent to BaseSemanticAnalyzer.getRootTasks() or BSA.getInputs().
    */
-  public static class BSAContext {
-    public HiveConf conf;
-    public Hive db;
-    public HashSet<ReadEntity> inputs;
-    public HashSet<WriteEntity> outputs;
-    public List<Task<? extends Serializable>> rootTasks;
-    public Logger LOG;
-    public Context ctx;
-    public boolean replLoadMode = false;
+  public static class SemanticAnalyzerWrapperContext {
+    private HiveConf conf;
+    private Hive db;
+    private HashSet<ReadEntity> inputs;
+    private HashSet<WriteEntity> outputs;
+    private List<Task<? extends Serializable>> tasks;
+    private Logger LOG;
+    private Context ctx;
 
-    public BSAContext(HiveConf conf, Hive db,
-                      HashSet<ReadEntity> inputs,
-                      HashSet<WriteEntity> outputs,
-                      List<Task<? extends Serializable>> rootTasks,
-                      Logger LOG, Context ctx){
+    public HiveConf getConf() {
+      return conf;
+    }
+
+    public Hive getHive() {
+      return db;
+    }
+
+    public HashSet<ReadEntity> getInputs() {
+      return inputs;
+    }
+
+    public HashSet<WriteEntity> getOutputs() {
+      return outputs;
+    }
+
+    public List<Task<? extends Serializable>> getTasks() {
+      return tasks;
+    }
+
+    public Logger getLOG() {
+      return LOG;
+    }
+
+    public Context getCtx() {
+      return ctx;
+    }
+
+    public SemanticAnalyzerWrapperContext(HiveConf conf, Hive db,
+                                          HashSet<ReadEntity> inputs,
+                                          HashSet<WriteEntity> outputs,
+                                          List<Task<? extends Serializable>> tasks,
+                                          Logger LOG, Context ctx){
       this.conf = conf;
       this.db = db;
       this.inputs = inputs;
       this.outputs = outputs;
-      this.rootTasks = rootTasks;
+      this.tasks = tasks;
       this.LOG = LOG;
       this.ctx = ctx;
     }
