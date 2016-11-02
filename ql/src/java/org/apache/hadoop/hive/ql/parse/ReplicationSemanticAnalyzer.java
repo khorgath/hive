@@ -526,7 +526,6 @@ public class ReplicationSemanticAnalyzer extends BaseSemanticAnalyzer {
         for (Task t : importTasks){
           precursor.addDependentTask(t);
         }
-        rootTasks.add(precursor);
       }
 
     } catch (Exception e) {
