@@ -35,6 +35,8 @@ EXPLAIN REPL LOAD backup FROM '${system:test.tmp.dir}/hrepl/next/';
 
 REPL LOAD backup FROM '${system:test.tmp.dir}/hrepl/next/';
 
+REPL STATUS backup;
+
 use backup;
 
 show tables;
