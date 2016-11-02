@@ -18,29 +18,48 @@
 package org.apache.hadoop.hive.ql.parse;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import org.antlr.runtime.tree.Tree;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.metastore.api.CurrentNotificationEventId;
 import org.apache.hadoop.hive.metastore.api.Database;
 import org.apache.hadoop.hive.ql.ErrorMsg;
 import org.apache.hadoop.hive.ql.QueryState;
+import org.apache.hadoop.hive.ql.exec.FetchTask;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.exec.TaskFactory;
+import org.apache.hadoop.hive.ql.exec.Utilities;
+import org.apache.hadoop.hive.ql.hooks.ReadEntity;
+import org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat;
 import org.apache.hadoop.hive.ql.lib.Node;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
+import org.apache.hadoop.hive.ql.metadata.Table;
 import org.apache.hadoop.hive.ql.plan.CreateDatabaseDesc;
 import org.apache.hadoop.hive.ql.plan.DDLWork;
+import org.apache.hadoop.hive.ql.plan.FetchWork;
 import org.apache.hadoop.hive.ql.plan.PlanUtils;
+import org.apache.hadoop.hive.ql.plan.TableDesc;
+import org.apache.hadoop.hive.serde.serdeConstants;
+import org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe;
+import org.apache.hadoop.io.IOUtils;
+import org.apache.hadoop.mapred.TextInputFormat;
 
+import java.io.DataInput;
+import java.io.DataOutputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.Serializable;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Properties;
 
 import static org.apache.hadoop.hive.ql.parse.HiveParser.*;
 
@@ -119,6 +138,90 @@ public class ReplicationSemanticAnalyzer extends BaseSemanticAnalyzer {
         tblName = PlanUtils.stripQuotes(ast.getChild(2).getText());
       }
       analyzeReplLoad(dbName, tblName, path);
+    } else if (TOK_REPL_STATUS == ast.getToken().getType()){
+      // REPL STATUS
+      logg("xSTATUS");
+
+      String dbName = null;
+      String tblName = null;
+
+      int numChildren = ast.getChildCount();
+      dbName = PlanUtils.stripQuotes(ast.getChild(0).getText());
+      if (numChildren > 1){
+        tblName = PlanUtils.stripQuotes(ast.getChild(1).getText());
+      }
+      analyzeReplStatus(dbName, tblName);
+    }
+  }
+
+  private void analyzeReplStatus(String dbName, String tblName) throws SemanticException {
+    logg("STATUS: " + nsafe(dbName) + "." + nsafe(tblName));
+
+    String replLastId = null; // FIXME : fetch repl.last.id into this.
+
+    try {
+      if (tblName != null){
+        // Checking for status of table
+        Table tbl =  db.getTable(dbName, tblName);
+        if (tbl != null){
+          inputs.add(new ReadEntity(tbl));
+          Map<String, String> params = tbl.getParameters();
+          if (params!= null && (params.containsKey(ReplicationSpec.KEY.CURR_STATE_ID))){
+            replLastId = params.get(ReplicationSpec.KEY.CURR_STATE_ID);
+          }
+        }
+      } else {
+        // Checking for status of a db
+        Database database = db.getDatabase(dbName);
+        if (database != null){
+          inputs.add(new ReadEntity(database));
+          Map<String, String> params = database.getParameters();
+          if (params!= null && (params.containsKey(ReplicationSpec.KEY.CURR_STATE_ID))){
+            replLastId = params.get(ReplicationSpec.KEY.CURR_STATE_ID);
+          }
+        }
+      }
+    } catch (HiveException e) {
+      throw new SemanticException(e); // TODO : simple wrap & rethrow for now, clean up with error codes
+    }
+
+    logg("RSTATUS: writing repl.last.id="+ nsafe(replLastId) + " out to "+ ctx.getResFile());
+    prepareReturnValues(Collections.singletonList(replLastId),"last_repl_id#string");
+  }
+
+  private void prepareReturnValues(List<String> values, String schema) throws SemanticException {
+    logg("prepareReturnValues : " + schema);
+    for (String s:values){
+      logg("    > "+ s);
+    }
+
+    ctx.setResFile(ctx.getLocalTmpPath());
+    // FIXME : this should not accessible by the user if we write to it from the frontend.
+    // Thus, we should Desc/Work this, otherwise there is a security issue here.
+    // Note: if we don't call ctx.setResFile, we get a NPE from the following code section
+    // If we do call it, then FetchWork thinks that the "table" here winds up thinking that
+    // this is a partitioned dir, which does not work. Thus, this does not work.
+
+    writeOutput(values);
+  }
+
+  private void writeOutput(List<String> values) throws SemanticException {
+    Path outputFile = ctx.getResFile();
+    FileSystem fs = null;
+    DataOutputStream outStream = null;
+    try {
+      fs = outputFile.getFileSystem(conf);
+      outStream = fs.create(outputFile);
+      outStream.writeBytes((values.get(0) == null? Utilities.nullStringOutput : values.get(0)));
+      for (int i = 1; i < values.size(); i++){
+        outStream.write(Utilities.ctrlaCode);
+        outStream.writeBytes((values.get(1) == null ? Utilities.nullStringOutput : values.get(1)));
+      }
+      outStream.write(Utilities.newLineCode);
+    } catch (IOException e) {
+      throw new SemanticException(e); // TODO : simple wrap & rethrow for now, clean up with error codes
+    } finally {
+      IOUtils.closeStream(outStream); // TODO : we have other closes here, and in ReplCopyTask - replace with this
     }
   }
 
@@ -151,6 +254,9 @@ public class ReplicationSemanticAnalyzer extends BaseSemanticAnalyzer {
           dumpTbl(dbName, tblName, dbRoot);
         }
      }
+
+     String currentReplId = String.valueOf(db.getMSC().getCurrentNotificationEventId().getEventId());
+     prepareReturnValues(Arrays.asList(dumpRoot.toUri().toString(), currentReplId),"dump_dir,last_repl_id#string,string");
 
     } catch (Exception e){
       throw new SemanticException(e); // TODO : simple wrap & rethrow for now, clean up with error codes

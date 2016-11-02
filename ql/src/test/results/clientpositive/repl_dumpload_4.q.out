@@ -1132,6 +1132,13 @@ POSTHOOK: Output: backup@srcpart@ds=2008-04-08/hr=11
 POSTHOOK: Output: backup@srcpart@ds=2008-04-08/hr=12
 POSTHOOK: Output: backup@srcpart@ds=2008-04-09/hr=11
 POSTHOOK: Output: backup@srcpart@ds=2008-04-09/hr=12
+PREHOOK: query: REPL STATUS backup
+PREHOOK: type: SHOW_TBLPROPERTIES
+PREHOOK: Input: database:backup
+POSTHOOK: query: REPL STATUS backup
+POSTHOOK: type: SHOW_TBLPROPERTIES
+POSTHOOK: Input: database:backup
+NULL
 PREHOOK: query: use backup
 PREHOOK: type: SWITCHDATABASE
 PREHOOK: Input: database:backup
