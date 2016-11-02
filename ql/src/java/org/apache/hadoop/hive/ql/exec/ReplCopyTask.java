@@ -186,7 +186,14 @@ public class ReplCopyTask extends Task<ReplCopyWork> implements Serializable {
       logg("RCT:_filesReadLine:"+line);
       Path p = new Path(line);
       FileSystem srcFs = p.getFileSystem(conf); // TODO : this is bad. revisit.
-      ret.add(fs.getFileStatus(p));
+      ret.add(srcFs.getFileStatus(p));
+      // Note - we need srcFs rather than fs, because it is possible that the _files lists files
+      // which are from a different filesystem than the fs where the _files file itself was loaded
+      // from. Currently, it is possible, for eg., to do REPL LOAD hdfs://<ip>/dir/ and for the _files
+      // in it to contain hdfs://<name>/ entries, and/or vice-versa, and this causes errors.
+      // It might also be possible that there will be a mix of them in a given _files file.
+      // TODO: revisit close to the end of replv2 dev, to see if our assumption now still holds,
+      // and if not so, optimize.
     }
 
     return ret;
