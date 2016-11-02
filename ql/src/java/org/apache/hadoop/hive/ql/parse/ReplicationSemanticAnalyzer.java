@@ -223,6 +223,44 @@ public class ReplicationSemanticAnalyzer extends BaseSemanticAnalyzer {
     }
   }
 
+
+  /*
+   * Example dump dirs we need to be able to handle :
+   *
+   * for: hive.repl.rootdir = staging/
+   * Then, repl dumps will be created in staging/<dumpdir>
+   *
+   * single-db-dump: staging/blah12345
+   *  blah12345/
+   *   default/
+   *    _metadata
+   *    tbl1/
+   *      _metadata
+   *      dt=20160907/
+   *        _files
+   *    tbl2/
+   *    tbl3/
+   *    unptn_tbl/
+   *      _metadata
+   *      _files
+   *
+   * multi-db-dump: staging/bar12347
+   * staging/
+   *  bar12347/
+   *   default/
+   *     ...
+   *   sales/
+   *     ...
+   *
+   * single table-dump: staging/baz123
+   * staging/
+   *  baz123/
+   *    _metadata
+   *    dt=20150931/
+   *      _files
+   *
+   */
+
   private void analyzeReplLoad(String dbName, String tblName, String path)
       throws SemanticException {
     logg("LOAD : " + nsafe(dbName)+"."+nsafe(tblName) + " from " + nsafe(path));
@@ -356,7 +394,7 @@ public class ReplicationSemanticAnalyzer extends BaseSemanticAnalyzer {
 
       boolean isLocationSet = false; // no location set on repl loads
       boolean isExternalSet = false; // all repl imports are non-external
-      boolean isPartSpecSet = false; // repl loads are not partition level
+      boolean isPartSpecSet = false; // bootstrap loads are not partition level
       LinkedHashMap<String, String> parsedPartSpec = null; // repl loads are not partition level
       String parsedLocation = null; // no location for repl imports
       boolean waitOnCreateDb = false;
