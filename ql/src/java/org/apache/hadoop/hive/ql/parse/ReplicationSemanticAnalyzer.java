@@ -303,10 +303,9 @@ public class ReplicationSemanticAnalyzer extends BaseSemanticAnalyzer {
 
   private ReplicationSpec getNewReplicationSpec() throws SemanticException {
     try {
-      ReplicationSpec replicationSpec = new ReplicationSpec(true, false, "replv2", "will-be-set", false);
+      ReplicationSpec replicationSpec = new ReplicationSpec(true, false, "replv2", "will-be-set", false, true);
       replicationSpec.setCurrentReplicationState(
           String.valueOf(db.getMSC().getCurrentNotificationEventId().getEventId()));
-      replicationSpec.setLazy(true); // no copy on export
       return replicationSpec;
     } catch (Exception e){
       throw new SemanticException(e); // TODO : simple wrap & rethrow for now, clean up with error codes

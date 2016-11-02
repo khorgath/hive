@@ -50,8 +50,9 @@ public class ReplicationSpec {
     REPL_SCOPE("repl.scope"),
     EVENT_ID("repl.event.id"),
     CURR_STATE_ID("repl.last.id"),
-    NOOP("repl.noop");
-
+    NOOP("repl.noop"),
+    LAZY("repl.lazy"),
+    ;
     private final String keyName;
 
     KEY(String s) {
@@ -103,32 +104,32 @@ public class ReplicationSpec {
     this((ASTNode)null);
   }
 
-  public  ReplicationSpec(
-      boolean isInReplicationScope, boolean isMetadataOnly, String eventReplicationState,
-      String currentReplicationState, boolean isNoop){
+  public ReplicationSpec(boolean isInReplicationScope, boolean isMetadataOnly,
+      String eventReplicationState, String currentReplicationState, boolean isNoop, boolean isLazy) {
     this.isInReplicationScope = isInReplicationScope;
     this.isMetadataOnly = isMetadataOnly;
     this.eventId = eventReplicationState;
     this.currStateId = currentReplicationState;
     this.isNoop = isNoop;
+    this.isLazy = isLazy;
   }
 
   public ReplicationSpec(Function<String, String> keyFetcher) {
     String scope = keyFetcher.apply(ReplicationSpec.KEY.REPL_SCOPE.toString());
     this.isMetadataOnly = false;
     this.isInReplicationScope = false;
-    if (scope != null){
-      if (scope.equalsIgnoreCase("metadata")){
+    if (scope != null) {
+      if (scope.equalsIgnoreCase("metadata")) {
         this.isMetadataOnly = true;
         this.isInReplicationScope = true;
-      } else if (scope.equalsIgnoreCase("all")){
+      } else if (scope.equalsIgnoreCase("all")) {
         this.isInReplicationScope = true;
       }
     }
     this.eventId = keyFetcher.apply(ReplicationSpec.KEY.EVENT_ID.toString());
     this.currStateId = keyFetcher.apply(ReplicationSpec.KEY.CURR_STATE_ID.toString());
-    this.isNoop = Boolean.parseBoolean(
-        keyFetcher.apply(ReplicationSpec.KEY.NOOP.toString()));
+    this.isNoop = Boolean.parseBoolean(keyFetcher.apply(ReplicationSpec.KEY.NOOP.toString()));
+    this.isLazy = Boolean.parseBoolean(keyFetcher.apply(ReplicationSpec.KEY.LAZY.toString()));
   }
 
   /**
@@ -313,6 +314,8 @@ public class ReplicationSpec {
         return getCurrentReplicationState();
       case NOOP:
         return String.valueOf(isNoop());
+      case LAZY:
+        return String.valueOf(isLazy());
     }
     return null;
   }
