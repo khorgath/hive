@@ -20,7 +20,6 @@ package org.apache.hadoop.hive.ql.plan;
 
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer;
 import org.apache.hadoop.hive.ql.plan.Explain.Level;
 
 /**
@@ -35,6 +34,38 @@ public class ReplCopyWork extends CopyWork {
   // If set to true, behaves identically to a CopyWork
   // If set to false, ReplCopyTask does a file-list of the things to be copied instead, and puts them in a file called _files.
   // Default is set to mimic CopyTask, with the intent that any Replication code will explicitly flip this.
+
+  /**
+   * TODO : Refactor
+   *
+   * There is an upcoming patch that refactors this bit of code. Currently, the idea is the following:
+   *
+   * By default, ReplCopyWork will behave similarly to CopyWork, and simply copy
+   * along data from the source to destination. If, however, listFilesOnOutput is set,
+   * then, instead of copying the individual files to the destination, it simply creates
+   * a file called _files on destination that contains the list of the original files
+   * that were intended to be copied. Thus, we do not actually copy the files at CopyWork
+   * time.
+   *
+   * The flip side of this behaviour happens when, instead, readListFromInput is set. This
+   * flag, if set, changes the source behaviour of this CopyTask, and instead of copying
+   * explicit files, this will then fall back to a behaviour wherein an _files is read from
+   * the source, and the files specified by the _files are then copied to the destination.
+   *
+   * This allows us a lazy-copy-on-source and a pull-from destination semantic that we want
+   * to use from replication.
+   *
+   * ==
+   *
+   * The refactor intent, however, is to simplify this, so that we have only 1 flag that we set,
+   * called isLazy. If isLazy is set, then this is the equivalent of the current listFilesOnOutput,
+   * and will generate a _files file.
+   *
+   * As to the input, we simply decide on whether to use the lazy mode or not depending on the
+   * presence of a _files file on the input. If we see a _files on the input, we simply expand it
+   * to copy as needed. If we do not, we copy as normal.
+   *
+   */
 
   protected boolean listFilesOnOutput = false; // governs copy-or-list-files behaviour
   // If set to true, it'll iterate over input files, and for each file in the input,

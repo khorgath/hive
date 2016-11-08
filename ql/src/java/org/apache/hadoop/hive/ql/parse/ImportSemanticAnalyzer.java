@@ -82,7 +82,7 @@ public class ImportSemanticAnalyzer extends BaseSemanticAnalyzer {
   // FIXME : Note that the tableExists flag as used by Auth is kinda a hack and
   // assumes only 1 table will ever be imported - this assumption is broken by
   // REPL LOAD. We need to fix this. Maybe by continuing the hack and replacing
-  // by a map, maybe we have time for something better.
+  // by a map, maybe by coming up with a better api for it.
   private boolean tableExists = false;
 
   public boolean existsTable() {
@@ -179,7 +179,7 @@ public class ImportSemanticAnalyzer extends BaseSemanticAnalyzer {
     Path fromPath = new Path(fromURI.getScheme(), fromURI.getAuthority(), fromURI.getPath());
 
     FileSystem fs = FileSystem.get(fromURI, x.getConf());
-    x.getInputs().add(EximUtil._toReadEntity(fromPath, x.getConf()));
+    x.getInputs().add(toReadEntity(fromPath, x.getConf()));
 
     EximUtil.ReadMetaData rv = new EximUtil.ReadMetaData();
     try {
@@ -213,7 +213,7 @@ public class ImportSemanticAnalyzer extends BaseSemanticAnalyzer {
 
     if (isLocationSet){
       tblDesc.setLocation(parsedLocation);
-      x.getInputs().add(EximUtil._toReadEntity(new Path(parsedLocation), x.getConf()));
+      x.getInputs().add(toReadEntity(new Path(parsedLocation), x.getConf()));
     }
 
     if ((parsedTableName!= null) && (!parsedTableName.isEmpty())){
@@ -836,21 +836,6 @@ public class ImportSemanticAnalyzer extends BaseSemanticAnalyzer {
 
       }
     }
-
-    /*
-      public Path getDefaultDatabasePath(String dbName) throws MetaException {
-    if (dbName.equalsIgnoreCase(DEFAULT_DATABASE_NAME)) {
-      return getWhRoot();
-    }
-    return new Path(getWhRoot(), dbName.toLowerCase() + DATABASE_WAREHOUSE_SUFFIX);
-  }
-
-  public Path getTablePath(Database db, String tableName)
-      throws MetaException {
-    return getDnsPath(new Path(getDatabasePath(db), MetaStoreUtils.encodeTableName(tableName.toLowerCase())));
-  }
-
-     */
 
      /* Note: In the following section, Metadata-only import handling logic is
         interleaved with regular repl-import logic. The rule of thumb being

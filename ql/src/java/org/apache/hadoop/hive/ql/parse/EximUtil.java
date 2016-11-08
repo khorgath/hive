@@ -237,8 +237,7 @@ public class EximUtil {
   }
 
   /* major version number should match for backward compatibility */
-  public static final String METADATA_FORMAT_VERSION = "0.1";
-  // TODO : should we bump this, now that we support db as well? Or not, since that will be loaded only off repl, and not off import?
+  public static final String METADATA_FORMAT_VERSION = "0.2";
 
   /* If null, then the major version number should match */
   public static final String METADATA_FORMAT_FORWARD_COMPATIBLE_VERSION = null;
@@ -559,36 +558,6 @@ public class EximUtil {
       return false;
     }
     return true;
-  }
-
-  // FIXME : static copy of BaseSemanticAnalyzer.toReadEntity copied here so we can reuse above export logic statically - fix
-  public static ReadEntity _toReadEntity(Path location, HiveConf conf) throws SemanticException {
-    try {
-      Path path = _tryQualifyPath(location, conf);
-      return new ReadEntity(path, FileUtils.isLocalFile(conf, path.toUri()));
-    } catch (Exception e) {
-      throw new SemanticException(e);
-    }
-  }
-
-
-  // FIXME : static copy of BaseSemanticAnalyzer.toWriteEntity copied here so we can reuse above export logic statically - fix
-  public static WriteEntity _toWriteEntity(Path location, HiveConf conf) throws SemanticException {
-    try {
-      Path path = _tryQualifyPath(location,conf);
-      return new WriteEntity(path, FileUtils.isLocalFile(conf, path.toUri()));
-    } catch (Exception e) {
-      throw new SemanticException(e);
-    }
-  }
-
-  // FIXME : static copy of BaseSemanticAnalyzer.tryQualifyPath copied here so we can reuse above export logic statically - fix
-  public static Path _tryQualifyPath(Path path, HiveConf conf) throws IOException {
-    try {
-      return path.getFileSystem(conf).makeQualified(path);
-    } catch (IOException e) {
-      return path;  // some tests expected to pass invalid schema
-    }
   }
 
   public static PathFilter getDirectoryFilter(final FileSystem fs) {

@@ -17,37 +17,25 @@
  */
 package org.apache.hadoop.hive.ql.parse;
 
-import com.google.common.base.Strings;
-import com.google.common.collect.Lists;
 import org.antlr.runtime.tree.Tree;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.metastore.api.CurrentNotificationEventId;
 import org.apache.hadoop.hive.metastore.api.Database;
 import org.apache.hadoop.hive.ql.ErrorMsg;
 import org.apache.hadoop.hive.ql.QueryState;
-import org.apache.hadoop.hive.ql.exec.FetchTask;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.exec.TaskFactory;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.hooks.ReadEntity;
-import org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat;
-import org.apache.hadoop.hive.ql.lib.Node;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.metadata.Table;
 import org.apache.hadoop.hive.ql.plan.CreateDatabaseDesc;
 import org.apache.hadoop.hive.ql.plan.DDLWork;
-import org.apache.hadoop.hive.ql.plan.FetchWork;
 import org.apache.hadoop.hive.ql.plan.PlanUtils;
-import org.apache.hadoop.hive.ql.plan.TableDesc;
-import org.apache.hadoop.hive.serde.serdeConstants;
-import org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe;
 import org.apache.hadoop.io.IOUtils;
-import org.apache.hadoop.mapred.TextInputFormat;
 
-import java.io.DataInput;
 import java.io.DataOutputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -59,28 +47,22 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 
 import static org.apache.hadoop.hive.ql.parse.HiveParser.*;
 
 public class ReplicationSemanticAnalyzer extends BaseSemanticAnalyzer {
 
-  private ASTNode ast; // TODO : clean up
-
   public ReplicationSemanticAnalyzer(QueryState queryState) throws SemanticException {
     super(queryState);
-    logg("RSAinit");
   }
 
   @Override
   public void analyzeInternal(ASTNode ast) throws SemanticException {
-    logg("RSAanalyzeInternal");
-    this.ast = ast;
-    logg(ast.getName() + ":" + ast.getToken().getText() + "=" + ast.getText());
-    display(ast,0);
+    LOG.debug("ReplicationSemanticAanalyzer:analyzeInternal");
+    LOG.debug(ast.getName() + ":" + ast.getToken().getText() + "=" + ast.getText());
     if (TOK_REPL_DUMP == ast.getToken().getType()){
       // REPL DUMP
-      logg("xDUMP");
+      LOG.debug("ReplicationSemanticAnalyzer:analyzeInternal:dump");
 
       String dbName = null;
       String tblName = null;
@@ -121,10 +103,10 @@ public class ReplicationSemanticAnalyzer extends BaseSemanticAnalyzer {
         currNode++; // move to the next root node
       }
 
-      analyzeReplDump(dbName,tblName,eventFrom,eventTo,batchSize);
+      analyzeReplDump(ast,dbName,tblName,eventFrom,eventTo,batchSize);
     } else if (TOK_REPL_LOAD == ast.getToken().getType()){
       // REPL LOAD
-      logg("xLOAD");
+      LOG.debug("ReplicationSemanticAnalyzer:analyzeInternal:load");
       String dbName = null;
       String tblName = null;
       String path = null;
@@ -140,7 +122,7 @@ public class ReplicationSemanticAnalyzer extends BaseSemanticAnalyzer {
       analyzeReplLoad(dbName, tblName, path);
     } else if (TOK_REPL_STATUS == ast.getToken().getType()){
       // REPL STATUS
-      logg("xSTATUS");
+      LOG.debug("ReplicationSemanticAnalyzer:analyzeInternal:status");
 
       String dbName = null;
       String tblName = null;
@@ -155,9 +137,9 @@ public class ReplicationSemanticAnalyzer extends BaseSemanticAnalyzer {
   }
 
   private void analyzeReplStatus(String dbName, String tblName) throws SemanticException {
-    logg("STATUS: " + nsafe(dbName) + "." + nsafe(tblName));
+    LOG.debug("ReplicationSemanticAnalyzer.analyzeReplStatus: " + String.valueOf(dbName) + "." + String.valueOf(tblName));
 
-    String replLastId = null; // FIXME : fetch repl.last.id into this.
+    String replLastId = null;
 
     try {
       if (tblName != null){
@@ -185,14 +167,14 @@ public class ReplicationSemanticAnalyzer extends BaseSemanticAnalyzer {
       throw new SemanticException(e); // TODO : simple wrap & rethrow for now, clean up with error codes
     }
 
-    logg("RSTATUS: writing repl.last.id="+ nsafe(replLastId) + " out to "+ ctx.getResFile());
+    LOG.debug("RSTATUS: writing repl.last.id="+ String.valueOf(replLastId) + " out to "+ ctx.getResFile());
     prepareReturnValues(Collections.singletonList(replLastId),"last_repl_id#string");
   }
 
   private void prepareReturnValues(List<String> values, String schema) throws SemanticException {
-    logg("prepareReturnValues : " + schema);
+    LOG.debug("prepareReturnValues : " + schema);
     for (String s:values){
-      logg("    > "+ s);
+      LOG.debug("    > "+ s);
     }
 
     ctx.setResFile(ctx.getLocalTmpPath());
@@ -225,13 +207,14 @@ public class ReplicationSemanticAnalyzer extends BaseSemanticAnalyzer {
     }
   }
 
-  private void analyzeReplDump(String dbPattern, String tblPattern,
+  private void analyzeReplDump(ASTNode ast, String dbPattern, String tblPattern,
                                Integer eventFrom, Integer eventTo, Integer batchSize)
       throws SemanticException {
-    logg("DUMP :" + nsafe(dbPattern) + "." +nsafe(tblPattern)
-        + " from " + nsafe(eventFrom)
-        + " to " + nsafe(eventTo)
-        + " batchsize " + nsafe(batchSize)
+    LOG.debug("ReplicationSemanticAnalyzer.analyzeReplDump :"
+        + String.valueOf(dbPattern) + "." +String.valueOf(tblPattern)
+        + " from " + String.valueOf(eventFrom)
+        + " to " + String.valueOf(eventTo)
+        + " batchsize " + String.valueOf(batchSize)
     );
 
     // Basically, we want an equivalent of a mass-export, except that we list-files instead of copyfiles.
@@ -240,18 +223,19 @@ public class ReplicationSemanticAnalyzer extends BaseSemanticAnalyzer {
     // and eventTo and batchSize are ignored. This means that we do not go through the event log, and instead,
     // we go through the various dbs & tbls that match our pattern, and roll them out.
 
-    // FIXME: make use of eventFrom/eventTo/batchSize when implementing non-bootstrap case.
+    // FIXME: make use of eventFrom/eventTo/batchSize when implementing non-bootstrap case, and also, during
+    // bootstrap consolidation to take care of events that occurred during bootstrap.
 
     String replRoot = conf.getVar(HiveConf.ConfVars.REPLDIR);
     Path dumpRoot = new Path(replRoot, getNextDumpDir());
 
     try {
       for ( String dbName : matchesDb(dbPattern)){
-        logg("RSA:db:"+dbName);
+        LOG.debug("ReplicationSemanticAnalyzer:analyzeReplDump dumping db:"+dbName);
         Path dbRoot = dumpDbMetadata(dbName, dumpRoot);
         for (String tblName : matchesTbl(dbName, tblPattern)){
-          logg("RSA:"+dbRoot.toUri()+"=>"+tblName);
-          dumpTbl(dbName, tblName, dbRoot);
+          LOG.debug("ReplicationSemanticAnalyzer:analyzeReplDump dumping table "+tblName + " to db root "+dbRoot.toUri());
+          dumpTbl(ast,dbName, tblName, dbRoot);
         }
      }
 
@@ -266,13 +250,17 @@ public class ReplicationSemanticAnalyzer extends BaseSemanticAnalyzer {
   private String getNextDumpDir() {
     if (conf.getBoolVar(HiveConf.ConfVars.HIVE_IN_TEST)){
       return "next";
+      // make it easy to write unit tests, instead of unique id generation.
+      // however, this does mean that in writing tests, we have to be aware that
+      // repl dump will clash with prior dumps, and thus have to clean up properly.
     } else {
       return String.valueOf(System.currentTimeMillis());
       // TODO: time good enough for now - we'll likely improve this.
+      // We may also work in something the equivalent of pid, thrid and move to nanos to ensure uniqueness.
     }
   }
 
-  private Path dumpTbl(String dbName, String tblName, Path dbRoot) throws SemanticException {
+  private Path dumpTbl(ASTNode ast, String dbName, String tblName, Path dbRoot) throws SemanticException {
     Path tableRoot = new Path(dbRoot, tblName);
 
     try {
@@ -368,7 +356,7 @@ public class ReplicationSemanticAnalyzer extends BaseSemanticAnalyzer {
 
   private void analyzeReplLoad(String dbName, String tblName, String path)
       throws SemanticException {
-    logg("LOAD : " + nsafe(dbName)+"."+nsafe(tblName) + " from " + nsafe(path));
+    LOG.debug("ReplSemanticAnalyzer.analyzeReplLoad : " + String.valueOf(dbName)+"."+String.valueOf(tblName) + " from " + String.valueOf(path));
 
     // for analyze repl load, we walk through the dir structure available in the path,
     // looking at each db, and then each table, and then setting up the appropriate
@@ -419,9 +407,9 @@ public class ReplicationSemanticAnalyzer extends BaseSemanticAnalyzer {
       }
 
       if ((dbName != null) && (dirsInLoadPath.length > 1)){
-        logg("Found multiple dirs when we expected 1:");
+        LOG.debug("Found multiple dirs when we expected 1:");
         for (FileStatus d : dirsInLoadPath){
-          logg("> " + d.getPath().toUri().toString());
+          LOG.debug("> " + d.getPath().toUri().toString());
         }
         throw new IllegalArgumentException(
             "Multiple dirs in " + loadPath.toUri().toString() +
@@ -543,21 +531,4 @@ public class ReplicationSemanticAnalyzer extends BaseSemanticAnalyzer {
     ), x.getConf());
   }
 
-  private void logg(String msg) {
-    System.err.println(msg);
-    LOG.error(msg);
-  }
-
-  private String nsafe(Object s){
-    return (s == null? "null": s.toString());
-  }
-
-  private void display(Node node, int level) {
-    logg("`" + Strings.repeat("-", level) + "> " + node.getName() + "=" + node.toString());
-    if (node.getChildren() != null){
-      for (Node child : node.getChildren()){
-        display(child,level+1);
-      }
-    }
-  }
 }

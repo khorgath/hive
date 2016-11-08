@@ -59,7 +59,7 @@ public class ReplCopyTask extends Task<ReplCopyWork> implements Serializable {
 
   @Override
   protected int execute(DriverContext driverContext) {
-    logg("RCT.exec");
+    LOG.debug("ReplCopyTask.execute()");
     FileSystem dstFs = null;
     Path toPath = null;
     try {
@@ -76,7 +76,7 @@ public class ReplCopyTask extends Task<ReplCopyWork> implements Serializable {
 
       List<FileStatus> srcFiles = new ArrayList<FileStatus>();
       FileStatus[] srcs = LoadSemanticAnalyzer.matchFilesOrDir(srcFs, fromPath);
-      logg("RCT.srcs="+ (srcs == null? "null" : srcs.length));
+      LOG.debug("ReplCopyTasks srcs=" + (srcs == null ? "null" : srcs.length));
       if (! rwork.getReadListFromInput()){
         if (srcs == null || srcs.length == 0) {
           if (work.isErrorOnSrcEmpty()) {
@@ -87,10 +87,10 @@ public class ReplCopyTask extends Task<ReplCopyWork> implements Serializable {
           }
         }
       } else {
-        logg("RCT._filesRead");
+        LOG.debug("ReplCopyTask making sense of _files");
         // Our input is probably the result of a _files listing, we should expand out _files.
         srcFiles = filesInFileListing(srcFs,fromPath);
-        logg("RCT._filesRead:"+(srcFiles == null? "null" : srcFiles.size()));
+        LOG.debug("ReplCopyTask _files contains:" + (srcFiles == null ? "null" : srcFiles.size()));
         if (srcFiles == null){
           if (work.isErrorOnSrcEmpty()) {
             console.printError("No _files entry found on source: " + fromPath.toString());
@@ -100,9 +100,10 @@ public class ReplCopyTask extends Task<ReplCopyWork> implements Serializable {
           }
         }
       }
-      // Add in all the lone filecopies expected as well - applies to both _files case stragglers and regular copies
+      // Add in all the lone filecopies expected as well - applies to
+      // both _files case stragglers and regular copies
       srcFiles.addAll(Arrays.asList(srcs));
-      logg("RCT.numFiles:"+(srcFiles == null? "null" : srcFiles.size()));
+      LOG.debug("ReplCopyTask numFiles:" + (srcFiles == null ? "null" : srcFiles.size()));
 
       boolean inheritPerms = conf.getBoolVar(HiveConf.ConfVars.HIVE_WAREHOUSE_SUBDIR_INHERIT_PERMS);
       if (!FileUtils.mkdir(dstFs, toPath, inheritPerms, conf)) {
@@ -110,18 +111,17 @@ public class ReplCopyTask extends Task<ReplCopyWork> implements Serializable {
         return 2;
       }
 
-      OutputStream listOS = null;
       BufferedWriter listBW = null;
       if (rwork.getListFilesOnOutputBehaviour()){
         Path listPath = new Path(toPath,"_files");
-        logg("RCT:_filesGen :" + listPath.toUri().toString());
+        LOG.debug("ReplCopyTask : generating _files at :" + listPath.toUri().toString());
         if (dstFs.exists(listPath)){
           console.printError("Cannot make target _files file:" + listPath.toString());
           return 4;
         }
-        listOS = dstFs.create(listPath);
-        listBW = new BufferedWriter(new OutputStreamWriter(listOS));
-        // TODO : verify if skipping charset here does not bite us later.
+        listBW = new BufferedWriter(new OutputStreamWriter(dstFs.create(listPath)));
+        // TODO : verify that not specifying charset here does not bite us
+        // later(for cases where filenames have unicode chars)
       }
 
       for (FileStatus oneSrc : srcFiles) {
@@ -130,13 +130,14 @@ public class ReplCopyTask extends Task<ReplCopyWork> implements Serializable {
         if (!rwork.getListFilesOnOutputBehaviour(oneSrc)){
           FileSystem actualSrcFs = null;
           if (rwork.getReadListFromInput()){
-            // TODO : this is horrid from a perf angle, revisit.
+            // TODO : filesystemcache prevents this from being a perf nightmare, but we
+            // should still probably follow up to see if we need to do something better here.
             actualSrcFs = oneSrc.getPath().getFileSystem(conf);
           } else {
             actualSrcFs = srcFs;
           }
 
-          logg("RCT:cp:" + oneSrc.getPath() + "=>" + toPath);
+          LOG.debug("ReplCopyTask :cp:" + oneSrc.getPath() + "=>" + toPath);
           if (!FileUtils.copy(actualSrcFs, oneSrc.getPath(), dstFs, toPath,
             false, // delete source
             true, // overwrite destination
@@ -146,9 +147,8 @@ public class ReplCopyTask extends Task<ReplCopyWork> implements Serializable {
           return 1;
           }
         }else{
-          logg("RCT_filesAdd:" + oneSrc.getPath().toUri());
+          LOG.debug("ReplCopyTask _files now tracks:" + oneSrc.getPath().toUri());
           console.printInfo("Tracking file: " + oneSrc.getPath().toUri());
-          LOG.debug("Tracking file: " + oneSrc.getPath().toUri());
           listBW.write(oneSrc.getPath().toUri().toString() + "\n");
         }
       }
@@ -170,22 +170,22 @@ public class ReplCopyTask extends Task<ReplCopyWork> implements Serializable {
   private List<FileStatus> filesInFileListing(FileSystem fs, Path path)
       throws IOException {
     Path fileListing = new Path(path, "_files");
-    logg("RCT:_filesRead:"+fileListing.toUri());
+    LOG.debug("ReplCopyTask filesInFileListing() reading " + fileListing.toUri());
     if (! fs.exists(fileListing)){
-      logg("RCT:_filesNope");
+      LOG.debug("ReplCopyTask : _files does not exist");
       return null; // Returning null from this fn can serve as an err condition.
       // On success, but with nothing to return, we can return an empty list.
     }
-    List<FileStatus> ret = new ArrayList<FileStatus>();
 
-    FSDataInputStream ifs = fs.open(fileListing);
-    BufferedReader br = new BufferedReader(new InputStreamReader(ifs));
-    // TODO : verify if skipping charset here does not bite us later.
+    List<FileStatus> ret = new ArrayList<FileStatus>();
+    BufferedReader br = new BufferedReader(new InputStreamReader(fs.open(fileListing)));
+    // TODO : verify if skipping charset here is okay
+
     String line = null;
     while ( (line = br.readLine()) != null){
-      logg("RCT:_filesReadLine:"+line);
+      LOG.debug("ReplCopyTask :_filesReadLine:" + line);
       Path p = new Path(line);
-      FileSystem srcFs = p.getFileSystem(conf); // TODO : this is bad. revisit.
+      FileSystem srcFs = p.getFileSystem(conf); // TODO : again, fs cache should make this okay, but if not, revisit
       ret.add(srcFs.getFileStatus(p));
       // Note - we need srcFs rather than fs, because it is possible that the _files lists files
       // which are from a different filesystem than the fs where the _files file itself was loaded
@@ -213,17 +213,17 @@ public class ReplCopyTask extends Task<ReplCopyWork> implements Serializable {
 
   public static Task<?> getLoadCopyTask(ReplicationSpec replicationSpec, Path srcPath, Path dstPath, HiveConf conf) {
     Task<?> copyTask = null;
-    LOG.warn("RCT:getLoadCopyTask: "+srcPath + "=>" + dstPath);
+    LOG.debug("ReplCopyTask:getLoadCopyTask: "+srcPath + "=>" + dstPath);
     if (replicationSpec.isInReplicationScope()){
       ReplCopyWork rcwork = new ReplCopyWork(srcPath, dstPath, false);
-      LOG.warn("RCT:\trcwork");
+      LOG.debug("ReplCopyTask:\trcwork");
       if (replicationSpec.isLazy()){
-        LOG.warn("RCT:\tlazy");
+        LOG.debug("ReplCopyTask:\tlazy");
         rcwork.setReadListFromInput(true);
       }
       copyTask = TaskFactory.get(rcwork, conf);
     } else {
-      LOG.warn("RCT:\tcwork");
+      LOG.debug("ReplCopyTask:\tcwork");
       copyTask = TaskFactory.get(new CopyWork(srcPath, dstPath, false), conf);
     }
     return copyTask;
@@ -231,24 +231,20 @@ public class ReplCopyTask extends Task<ReplCopyWork> implements Serializable {
 
   public static Task<?> getDumpCopyTask(ReplicationSpec replicationSpec, Path srcPath, Path dstPath, HiveConf conf) {
     Task<?> copyTask = null;
-    LOG.warn("RCT:getDumpCopyTask: "+srcPath + "=>" + dstPath);
+    LOG.debug("ReplCopyTask:getDumpCopyTask: "+srcPath + "=>" + dstPath);
     if (replicationSpec.isInReplicationScope()){
       ReplCopyWork rcwork = new ReplCopyWork(srcPath, dstPath, false);
-      LOG.warn("RCT:\trcwork");
+      LOG.debug("ReplCopyTask:\trcwork");
       if (replicationSpec.isLazy()){
-        LOG.warn("RCT:\tlazy");
+        LOG.debug("ReplCopyTask:\tlazy");
         rcwork.setListFilesOnOutputBehaviour(true);
       }
       copyTask = TaskFactory.get(rcwork, conf);
     } else {
-      LOG.warn("RCT:\tcwork");
+      LOG.debug("ReplCopyTask:\tcwork");
       copyTask = TaskFactory.get(new CopyWork(srcPath, dstPath, false), conf);
     }
     return copyTask;
   }
 
-  private void logg(String msg) {
-    System.err.println(msg);
-    LOG.error(msg);
-  }
 }

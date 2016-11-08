@@ -208,7 +208,7 @@ public class ExportSemanticAnalyzer extends BaseSemanticAnalyzer {
         rootTasks.add(rTask);
         inputs.add(new ReadEntity(ts.tableHandle));
       }
-      outputs.add(EximUtil._toWriteEntity(parentPath,conf));
+      outputs.add(toWriteEntity(parentPath,conf));
     }
   }
 

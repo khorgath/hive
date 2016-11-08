@@ -432,8 +432,8 @@ public class HiveConf extends Configuration {
         "HDFS root scratch dir for Hive jobs which gets created with write all (733) permission. " +
         "For each connecting user, an HDFS scratch dir: ${hive.exec.scratchdir}/<username> is created, " +
         "with ${hive.scratch.dir.permission}."),
-    REPLDIR("hive.repl.rootdir","/tmp/hrepl/",
-        "HDFS root dir for all replication dumps."), // FIXME : looks like METASTOREWAREHOUSEDIR and SCRATCHDIR change b/w dbs - figure out what we want to do about this
+    REPLDIR("hive.repl.rootdir","/user/hive/repl/",
+        "HDFS root dir for all replication dumps."),
     LOCALSCRATCHDIR("hive.exec.local.scratchdir",
         "${system:java.io.tmpdir}" + File.separator + "${system:user.name}",
         "Local scratch space for Hive jobs"),
